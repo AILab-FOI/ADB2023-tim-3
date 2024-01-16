@@ -22,6 +22,7 @@ def getLogsByGameId(gameId):
                     zapis = "log"+str(i)
                     log_entry = root[zapis] 
                     if  log_entry is not None:
+                        log_entry.turnNo
                         logs.append(log_entry)
                         i = i + 1
                     else:
@@ -33,7 +34,6 @@ def getLogsByGameId(gameId):
         finally:
             connection.close()
             db.close()
-
         return logs
 
 def getLogByTurnNo(turnNo, gameId):
@@ -148,8 +148,7 @@ def addLog(log):
         root = connection.root()
         
         try:
-            turnNo = log.turnNo
-            zapis = "log"+str(turnNo)
+            zapis = "log"+str(log.turnNo)
 
             with transaction.manager:
                 root[zapis] = log
