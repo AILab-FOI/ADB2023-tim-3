@@ -3,6 +3,7 @@ from ZEO.ClientStorage import ClientStorage
 import transaction
 from typing import List
 import threading
+from persistent.mapping import PersistentMapping
 
 lock = threading.Lock()
 
@@ -15,18 +16,18 @@ def getLogsByGameId(gameId):
         root = connection.root()
 
         try:
-            game = root[gameId]
-            if game is not None:
-                i = 1
-                while True:
-                    zapis = "log"+str(i)
-                    log_entry = root[zapis] 
-                    if  log_entry is not None:
-                        log_entry.turnNo
-                        logs.append(log_entry)
-                        i = i + 1
-                    else:
-                        break
+            valid_game_id = False
+            game_keys = root['games'].keys()
+            for key in game_keys:
+                if key == gameId:
+                    valid_game_id = True
+            if valid_game_id == True:
+                for log_entry in root['logs'].keys():
+                    parts = log_entry.split('_')
+                    id = parts[0]
+                    if id == gameId:
+                        root['logs'][log_entry].turnNo
+                        logs.append(root['logs'][log_entry])
             else:
                 print("Game with Id:", gameId, "not in the database")
         except Exception as e:
@@ -34,6 +35,7 @@ def getLogsByGameId(gameId):
         finally:
             connection.close()
             db.close()
+
         return logs
 
 def getLogByTurnNo(turnNo, gameId):
@@ -44,10 +46,14 @@ def getLogByTurnNo(turnNo, gameId):
         root = connection.root()
 
         try:
-            game = root[gameId]
-            if game is not None:
-                zapis = "log"+str(turnNo)
-                log = root[zapis]
+            valid_game_id = False
+            game_keys = root['games'].keys()
+            for key in game_keys:
+                if key == gameId:
+                    valid_game_id = True
+            if valid_game_id == True:
+                object_name = str(gameId)+'_log_'+str(turnNo)
+                log = root['logs'][object_name]
                 log.turnNo
                 return log
             else:
@@ -64,23 +70,19 @@ def getGame(gameId):
         db = DB(storage)
         connection = db.open()
         root = connection.root()
+        games = root['games'].values()
 
         try:
-            game = root.get(gameId)
-            if game:
-                game.gameId
-                game.whitePlayer.name
-                game.blackPlayer.name
-                game.board
+            for game in games:
+                if game.gameId == gameId:
+                    return game
         except Exception as e:
             print(f"Error while reading object game: {e}")
         finally:
             connection.close()
             db.close()
 
-        return game
-
-def getPlayer(playerName):
+def getPlayer(playerName, gameId):
     with lock:
         storage = ClientStorage( ( 'localhost', 8090 ) )
         db = DB(storage)
@@ -88,11 +90,9 @@ def getPlayer(playerName):
         root = connection.root()
 
         try:
-            player = root.get(playerName)
-            if player:
-                #print("Player", player.name, "read from database")
-                player.id
-                player.name
+            object_name = str(gameId)+'_player_'+str(playerName)
+            player = root['players'][object_name]
+            player.id
         except Exception as e:
             print(f"Error while reading object {playerName}: {e}")
         finally:
@@ -101,7 +101,7 @@ def getPlayer(playerName):
 
         return player
 
-def getPiece(pieceName):
+def getPiece(pieceName, gameId):
     with lock:
         storage = ClientStorage( ( 'localhost', 8090 ) )
         db = DB(storage)
@@ -109,9 +109,9 @@ def getPiece(pieceName):
         root = connection.root()
 
         try:
-            piece = root.get(pieceName)
-            #if piece:
-                #print("Piece", pieceName, "read from database")
+            object_name = str(gameId)+'_piece_'+str(pieceName)
+            piece = root['pieces'][object_name]
+            piece.color
         except Exception as e:
             print(f"Error while reading object {pieceName}: {e}")
         finally:
@@ -120,7 +120,7 @@ def getPiece(pieceName):
 
         return piece
 
-def getPieceType(pieceTypeName):
+def getPieceTypes():
     with lock:
         storage = ClientStorage( ( 'localhost', 8090 ) )
         db = DB(storage)
@@ -128,19 +128,17 @@ def getPieceType(pieceTypeName):
         root = connection.root()
 
         try:
-            pieceType = root.get(pieceTypeName)
-            if pieceType:
-                #print("Piece type", pieceType.typename, "read from database")
-                pieceType.typeid
+            pieceTypes = list(root['piece_types'].values())
+            pieceTypes[0].typeid
         except Exception as e:
-            print(f"Error while reading object {pieceTypeName}: {e}")
+            print(f"Error while reading object pieceType: {e}")
         finally:
             connection.close()
             db.close()
 
-        return pieceType
+        return pieceTypes
 
-def addLog(log):
+def addLog(log, gameId):
     with lock:
         storage = ClientStorage( ( 'localhost', 8090 ) )
         db = DB(storage)
@@ -148,12 +146,19 @@ def addLog(log):
         root = connection.root()
         
         try:
-            zapis = "log"+str(log.turnNo)
+            valid_game_id = False
+            game_keys = root['games'].keys()
+            for key in game_keys:
+                if key == gameId:
+                    valid_game_id = True
+            if valid_game_id == True:
+                with transaction.manager:
+                    object_name = str(gameId)+'_log_'+str(log.turnNo)
+                    root['logs'][object_name] = log
 
-            with transaction.manager:
-                root[zapis] = log
-
-            print("New Log entry added to the database")
+                print("New Log entry added to the database")
+            else:
+                print("Given invalid game id")
         except Exception as e:
             print(f"Error while adding log: {e}")
             transaction.abort()
@@ -168,15 +173,28 @@ def addGame(game):
         connection = db.open()
         root = connection.root()
 
-        with transaction.manager:
-            root[game.gameId] = game
+        try:
+            if 'games' not in root:
+                with transaction.manager:
+                    root['games'] = PersistentMapping()
+                    root['logs'] = PersistentMapping()
+                    root['players'] = PersistentMapping()
+                    root['pieces'] = PersistentMapping()
+                    root['piece_types'] = PersistentMapping()
 
-        print("Game with id", game.gameId, "added to the database")
+            with transaction.manager:
+                root['games'][game.gameId] = game
+            
+            print("Game with id", game.gameId, "added to the database")
+            
+        except Exception as e:
+            print(f"Error during transaction: {e}")
+            transaction.abort()
+        finally:
+            connection.close()
+            db.close()
 
-        connection.close()
-        db.close()
-
-def addPlayer(player):
+def addPlayer(player, gameId):
     with lock:
         storage = ClientStorage( ( 'localhost', 8090 ) )
         db = DB(storage)
@@ -184,14 +202,15 @@ def addPlayer(player):
         root = connection.root()
 
         with transaction.manager:
-            root[player.name] = player
+            object_name = str(gameId)+'_player_'+str(player.name)
+            root['players'][object_name] = player
         
         print(player.name, "added to the database")
 
         connection.close()
         db.close()
 
-def addPieces(pieces:List[any], namesOfPieces):
+def addPieces(pieces:List[any], namesOfPieces, gameId):
     with lock:
         storage = ClientStorage( ( 'localhost', 8090 ) )
         db = DB(storage)
@@ -200,7 +219,8 @@ def addPieces(pieces:List[any], namesOfPieces):
 
         for i, piece in enumerate(pieces):
             with transaction.manager:
-                root[namesOfPieces[i]] = piece
+                object_name = str(gameId)+'_piece_'+str(namesOfPieces[i])
+                root['pieces'][object_name] = piece
 
         print("Pieces added to the database")
 
@@ -216,7 +236,7 @@ def addPieceTypes(pieceTypes:List[any]):
 
         for pieceType in pieceTypes:
             with transaction.manager:
-                root[pieceType.typename] = pieceType
+                root['piece_types'][pieceType.typename] = pieceType
 
         print("Piece types added to the database")
 
