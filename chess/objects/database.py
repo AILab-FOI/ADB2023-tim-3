@@ -29,9 +29,9 @@ def getLogsByGameId(gameId):
                         root['logs'][log_entry].turnNo
                         logs.append(root['logs'][log_entry])
             else:
-                print("Game with Id:", gameId, "not in the database")
+                print("DB: Game with Id:", gameId, "not in the database")
         except Exception as e:
-            print(f"Error while reading logs: {e}")
+            print(f"DB: Error while reading logs: {e}")
         finally:
             connection.close()
             db.close()
@@ -57,9 +57,9 @@ def getLogByTurnNo(turnNo, gameId):
                 log.turnNo
                 return log
             else:
-                print("Game with Id:", gameId, "not in the database")
+                print("DB: Game with Id:", gameId, "not in the database")
         except Exception as e:
-            print(f"Error while reading log: {e}")
+            print(f"DB: Error while reading log: {e}")
         finally:
             connection.close()
             db.close()
@@ -77,12 +77,12 @@ def getGame(gameId):
                 if game.gameId == gameId:
                     return game
         except Exception as e:
-            print(f"Error while reading object game: {e}")
+            print(f"DB: Error while reading object game: {e}")
         finally:
             connection.close()
             db.close()
 
-def getPlayer(playerName, gameId):
+def getPlayer(playerName):
     with lock:
         storage = ClientStorage( ( 'localhost', 8090 ) )
         db = DB(storage)
@@ -90,11 +90,10 @@ def getPlayer(playerName, gameId):
         root = connection.root()
 
         try:
-            object_name = str(gameId)+'_player_'+str(playerName)
-            player = root['players'][object_name]
+            player = root['players'][playerName]
             player.id
         except Exception as e:
-            print(f"Error while reading object {playerName}: {e}")
+            print(f"DB: Error while reading object {playerName}: {e}")
         finally:
             connection.close()
             db.close()
@@ -109,11 +108,11 @@ def getPiece(pieceName, gameId):
         root = connection.root()
 
         try:
-            object_name = str(gameId)+'_piece_'+str(pieceName)
+            object_name = str(gameId)+'_piece_'+pieceName
             piece = root['pieces'][object_name]
             piece.color
         except Exception as e:
-            print(f"Error while reading object {pieceName}: {e}")
+            print(f"DB: Error while reading object {pieceName}: {e}")
         finally:
             connection.close()
             db.close()
@@ -131,7 +130,7 @@ def getPieceTypes():
             pieceTypes = list(root['piece_types'].values())
             pieceTypes[0].typeid
         except Exception as e:
-            print(f"Error while reading object pieceType: {e}")
+            print(f"DB: Error while reading object pieceType: {e}")
         finally:
             connection.close()
             db.close()
@@ -156,11 +155,11 @@ def addLog(log, gameId):
                     object_name = str(gameId)+'_log_'+str(log.turnNo)
                     root['logs'][object_name] = log
 
-                print("New Log entry added to the database")
+                print("DB: New Log entry added")
             else:
-                print("Given invalid game id")
+                print("DB: Given invalid game id")
         except Exception as e:
-            print(f"Error while adding log: {e}")
+            print(f"DB: Error while adding log: {e}")
             transaction.abort()
         finally:
             connection.close()
@@ -178,23 +177,20 @@ def addGame(game):
                 with transaction.manager:
                     root['games'] = PersistentMapping()
                     root['logs'] = PersistentMapping()
-                    root['players'] = PersistentMapping()
-                    root['pieces'] = PersistentMapping()
-                    root['piece_types'] = PersistentMapping()
 
             with transaction.manager:
                 root['games'][game.gameId] = game
             
-            print("Game with id", game.gameId, "added to the database")
+            print("DB: Game with id", game.gameId, "added")
             
         except Exception as e:
-            print(f"Error during transaction: {e}")
+            print(f"DB: Error during transaction: {e}")
             transaction.abort()
         finally:
             connection.close()
             db.close()
 
-def addPlayer(player, gameId):
+def updateGame(game):
     with lock:
         storage = ClientStorage( ( 'localhost', 8090 ) )
         db = DB(storage)
@@ -202,10 +198,34 @@ def addPlayer(player, gameId):
         root = connection.root()
 
         with transaction.manager:
-            object_name = str(gameId)+'_player_'+str(player.name)
-            root['players'][object_name] = player
+            root['games'][game.gameId] = game
+            
+        print("DB: Game with id", game.gameId, "updated")
+
+        try:
+            updatedGame = root['games'][game.gameId]
+            return updatedGame
+        except Exception as e:
+            print(f"DB: Error while reading object game: {e}")
+        finally:
+            connection.close()
+            db.close()
+
+def addPlayer(player):
+    with lock:
+        storage = ClientStorage( ( 'localhost', 8090 ) )
+        db = DB(storage)
+        connection = db.open()
+        root = connection.root()
+
+        if 'players' not in root:
+            with transaction.manager:
+                root['players'] = PersistentMapping()
+
+        with transaction.manager:
+            root['players'][player.name] = player
         
-        print(player.name, "added to the database")
+        print("DB:",player.name, "added")
 
         connection.close()
         db.close()
@@ -217,12 +237,32 @@ def addPieces(pieces:List[any], namesOfPieces, gameId):
         connection = db.open()
         root = connection.root()
 
+        if 'pieces' not in root:
+                with transaction.manager:
+                    root['pieces'] = PersistentMapping()
+
         for i, piece in enumerate(pieces):
             with transaction.manager:
                 object_name = str(gameId)+'_piece_'+str(namesOfPieces[i])
                 root['pieces'][object_name] = piece
 
-        print("Pieces added to the database")
+        print("DB: Pieces added")
+
+        connection.close()
+        db.close()
+
+def updatePiece(piece, piece_name, gameId):
+    with lock:
+        storage = ClientStorage( ( 'localhost', 8090 ) )
+        db = DB(storage)
+        connection = db.open()
+        root = connection.root()
+
+        with transaction.manager:
+            object_name = str(gameId)+'_piece_'+piece_name
+            root['pieces'][object_name] = piece
+
+        print("DB: Piece", piece_name ,"updated")
 
         connection.close()
         db.close()
@@ -234,11 +274,15 @@ def addPieceTypes(pieceTypes:List[any]):
         connection = db.open()
         root = connection.root()
 
+        if 'piece_types' not in root:
+                with transaction.manager:
+                    root['piece_types'] = PersistentMapping()
+
         for pieceType in pieceTypes:
             with transaction.manager:
                 root['piece_types'][pieceType.typename] = pieceType
 
-        print("Piece types added to the database")
+        print("DB: Piece types added")
 
         connection.close()
         db.close()

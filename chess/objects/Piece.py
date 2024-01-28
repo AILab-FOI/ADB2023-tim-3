@@ -1,22 +1,22 @@
 from persistent import Persistent
 from PieceType import PieceType
 import uuid
+import database
 
 class Piece():
-    
-    def __init__(self,pieceTypeId,currentPosition,color,playerId):
+    def __init__(self,pieceTypeId,currentPosition,color,name):
         self.id=str(uuid.uuid4())
         self.currentPosition=currentPosition
         self.color=color
-        self.playerId=playerId
         self.pieceTypeId=pieceTypeId
+        self.name=name
         self.isDead=False
         self.moved=False
 
     #removing dead piece from the board
     def removePiece(self):
+        self.currentPosition=[9,9]
         self.isDead=True
-        self.currentPosition=[-1,-1]
 
     
     #all possible moves, boarders taken into consideration, but not the positions of other pieces
@@ -72,14 +72,24 @@ class Piece():
         #PAWN    
         #an pasan taken into consideration    
         else:
-            possiblePositions.extend([
-                (currentPosition[0], currentPosition[1] + 1),
-                (currentPosition[0] - 1, currentPosition[1] + 1),
-                (currentPosition[0] + 1, currentPosition[1] + 1),
-                (currentPosition[0], currentPosition[1] + 2),
-                (currentPosition[0]+1, currentPosition[1]),
-                (currentPosition[0]-1, currentPosition[1])
-            ])
+            if(self.color=="white"):
+                possiblePositions.extend([
+                    (currentPosition[0], currentPosition[1] + 1),
+                    (currentPosition[0] - 1, currentPosition[1] + 1),
+                    (currentPosition[0] + 1, currentPosition[1] + 1),
+                    (currentPosition[0], currentPosition[1] + 2),
+                    (currentPosition[0]+1, currentPosition[1]),
+                    (currentPosition[0]-1, currentPosition[1])
+                ])
+            if(self.color=="black"): 
+                 possiblePositions.extend([
+                    (currentPosition[0], currentPosition[1] - 1),
+                    (currentPosition[0] - 1, currentPosition[1] - 1),
+                    (currentPosition[0] + 1, currentPosition[1] - 1),
+                    (currentPosition[0], currentPosition[1] - 2),
+                    (currentPosition[0]+1, currentPosition[1]),
+                    (currentPosition[0]-1, currentPosition[1])
+                ])
 
         #removing positions beyond borders    
         for item in possiblePositions:
@@ -111,6 +121,5 @@ class Piece():
         return sortedMoves
 
 
-p=Piece(1,2,(1,1),"white",1)
+#p=Piece(1,(1,1),"white")
 #print(p.defineMoves(*p.currentPosition))
-

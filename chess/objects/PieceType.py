@@ -15,5 +15,3 @@ ubaci ovih 6 tipova rucno u bazu
 5-Bishop
 6-Pawn
 """
-    
-
